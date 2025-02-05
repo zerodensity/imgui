@@ -6347,7 +6347,7 @@ bool ImGui::InputTextEx2(const char* label, const char* hint, char* buf, int buf
             int rc = sscanf(state->TextA.Data, "%lf", &tvalue);
             char formatBuf[32] = { 0 };
             int foreDigits = dotPosition - 1;
-            sprintf(formatBuf, "%% %d.%dlf%%s",foreDigits+1+precision, precision);
+            sprintf(formatBuf, "%% %d.%dlf", foreDigits + 1 + precision, precision);
             double max = pow(10, foreDigits) - 1 / pow(10, precision);
             if (tvalue > max) tvalue = max; else if (tvalue < -max) tvalue = -max;
             sprintf(buf, formatBuf, tvalue);
@@ -6514,25 +6514,42 @@ bool ImGui::InputTextEx2(const char* label, const char* hint, char* buf, int buf
                 g.TempInputId = g.ActiveId;
                 ImStb::stb_textedit_clamp(state, state->Stb);
 
-                double dd;
-                char formatBuf[32];
-                double max = 100;
-                switch (precision) {
-                case 1:sprintf(formatBuf, "%% 6.1lf"); max = 99.9; break;
-                case 2:sprintf(formatBuf, "%% 7.2lf"); max = 999.99; break;
-                case 3:sprintf(formatBuf, "%% 8.3lf"); max = 999.999; break;
-                case 4:sprintf(formatBuf, "%% 9.4lf"); max = 999.9999; break;
-                }
-                int rc = sscanf(buf, "%lf", &dd);
-
-                if (dd > max) dd = max; if (dd < -max) dd = -max;
-
-                sprintf(buf, formatBuf, dd);
-                sprintf(&state->TextA[0], formatBuf, dd);
+                double tvalue;
+                int rc = sscanf(state->TextA.Data, "%lf", &tvalue);
+                char formatBuf[32] = { 0 };
+                int foreDigits = dotPosition - 1;
+                sprintf(formatBuf, "%% %d.%dlf", foreDigits + 1 + precision, precision);
+                double max = pow(10, foreDigits) - 1 / pow(10, precision);
+                if (tvalue > max) tvalue = max; else if (tvalue < -max) tvalue = -max;
+                sprintf(buf, formatBuf, tvalue);
+                sprintf(&state->TextA[0], formatBuf, tvalue);
                 state->TextLen = (int)strlen(buf);
                 state->Stb->cursor = 0;
                 state->Stb->select_start = 0;
                 state->Stb->select_end = state->TextLen;
+
+
+
+                //double dd;
+
+                //char formatBuf[32];
+                //double max = 100;
+                //switch (precision) {
+                //case 1:sprintf(formatBuf, "%% 6.1lf"); max = 99.9; break;
+                //case 2:sprintf(formatBuf, "%% 7.2lf"); max = 999.99; break;
+                //case 3:sprintf(formatBuf, "%% 8.3lf"); max = 999.999; break;
+                //case 4:sprintf(formatBuf, "%% 9.4lf"); max = 999.9999; break;
+                //}
+                //int rc = sscanf(buf, "%lf", &dd);
+
+                //if (dd > max) dd = max; if (dd < -max) dd = -max;
+
+                //sprintf(buf, formatBuf, dd);
+                //sprintf(&state->TextA[0], formatBuf, dd);
+                //state->TextLen = (int)strlen(buf);
+                //state->Stb->cursor = 0;
+                //state->Stb->select_start = 0;
+                //state->Stb->select_end = state->TextLen;
             }
 
             state->CursorAnimReset();
@@ -6647,17 +6664,17 @@ bool ImGui::InputTextEx2(const char* label, const char* hint, char* buf, int buf
         // FIXME-OSX: Missing support for Alt(option)+Right/Left = go to end of line, or next line if already in end of line.
         if (IsKeyPressed(ImGuiKey_LeftArrow))
         {
-            if (state->Stb->cursor == 5)
+            if (state->Stb->cursor == (dotPosition + 1))
                 state->OnKeyPressed((is_startend_key_down ? STB_TEXTEDIT_K_LINESTART : is_wordmove_key_down ? STB_TEXTEDIT_K_WORDLEFT : STB_TEXTEDIT_K_LEFT) | k_mask);
             state->OnKeyPressed((is_startend_key_down ? STB_TEXTEDIT_K_LINESTART : is_wordmove_key_down ? STB_TEXTEDIT_K_WORDLEFT : STB_TEXTEDIT_K_LEFT) | k_mask);
         }
         else if (IsKeyPressed(ImGuiKey_RightArrow))
         {
-            if (state->Stb->cursor == 3)
+            if (state->Stb->cursor == (dotPosition - 1))
                 state->OnKeyPressed((is_startend_key_down ? STB_TEXTEDIT_K_LINEEND : is_wordmove_key_down ? STB_TEXTEDIT_K_WORDRIGHT : STB_TEXTEDIT_K_RIGHT) | k_mask);
             state->OnKeyPressed((is_startend_key_down ? STB_TEXTEDIT_K_LINEEND : is_wordmove_key_down ? STB_TEXTEDIT_K_WORDRIGHT : STB_TEXTEDIT_K_RIGHT) | k_mask);
-            if (state->Stb->cursor >= (4 + precision))
-                state->Stb->cursor = (4 + precision);
+            if (state->Stb->cursor >= (dotPosition + precision))
+                state->Stb->cursor = (dotPosition + precision);
         }
         else if (IsKeyPressed(ImGuiKey_UpArrow) && is_multiline) { if (io.KeyCtrl) SetScrollY(draw_window, ImMax(draw_window->Scroll.y - g.FontSize, 0.0f)); else state->OnKeyPressed((is_startend_key_down ? STB_TEXTEDIT_K_TEXTSTART : STB_TEXTEDIT_K_UP) | k_mask); }
         else if (IsKeyPressed(ImGuiKey_DownArrow) && is_multiline) { if (io.KeyCtrl) SetScrollY(draw_window, ImMin(draw_window->Scroll.y + g.FontSize, GetScrollMaxY())); else state->OnKeyPressed((is_startend_key_down ? STB_TEXTEDIT_K_TEXTEND : STB_TEXTEDIT_K_DOWN) | k_mask); }
@@ -6669,22 +6686,19 @@ bool ImGui::InputTextEx2(const char* label, const char* hint, char* buf, int buf
             g.TempInputId = g.ActiveId;
             ImStb::stb_textedit_clamp(state, state->Stb);
 
-            double num;
-            int rc = sscanf(buf, "%lf", &num);
-
-            char formatBuf[32];
-            double max = 100;
+            double tvalue;
+            int rc = sscanf(state->TextA.Data, "%lf", &tvalue);
+            char formatBuf[32] = { 0 };
             int foreDigits = dotPosition - 1;
-            sprintf(formatBuf, "%% %d.%dlf%%s", foreDigits + 1 + precision, precision);
-            if (num > max) num = max; if (num < -max) num = -max;
-
-            sprintf(buf, formatBuf, num);
-            sprintf(&state->TextA[0], formatBuf, num);
+            sprintf(formatBuf, "%% %d.%dlf", foreDigits + 1 + precision, precision);
+            double max = pow(10, foreDigits) - 1 / pow(10, precision);
+            if (tvalue > max) tvalue = max; else if (tvalue < -max) tvalue = -max;
+            sprintf(buf, formatBuf, tvalue);
+            sprintf(&state->TextA[0], formatBuf, tvalue);
             state->TextLen = (int)strlen(buf);
             state->Stb->cursor = 0;
             state->Stb->select_start = 0;
             state->Stb->select_end = state->TextLen;
-
         }
         else if (IsKeyPressed(ImGuiKey_End))
         {
@@ -6694,11 +6708,13 @@ bool ImGui::InputTextEx2(const char* label, const char* hint, char* buf, int buf
         }
         else if (IsKeyPressed(ImGuiKey_Delete) && !is_readonly && !is_cut)
         {
-            state->OnKeyPressed(STB_TEXTEDIT_K_DELETE | k_mask);
+            //state->OnKeyPressed(STB_TEXTEDIT_K_DELETE | k_mask);
+            state->Edited = true;
         }
         else if (IsKeyPressed(ImGuiKey_Backspace) && !is_readonly)
         {
-            state->OnKeyPressed(STB_TEXTEDIT_K_BACKSPACE | k_mask);
+//            state->OnKeyPressed(STB_TEXTEDIT_K_BACKSPACE | k_mask);
+            state->Edited = true;
         }
         else if (is_enter_pressed || is_gamepad_validate)
         {
