@@ -6265,6 +6265,9 @@ bool ImGui::InputTextEx2(const char* label, const char* hint, char* buf, int buf
     if (window->SkipItems)
         return false;
 
+    int dotPosition = 4;
+    int maxPosition = dotPosition + precision;
+
     IM_ASSERT(!((flags & ImGuiInputTextFlags_CallbackHistory) && (flags & ImGuiInputTextFlags_Multiline)));        // Can't use both together (they both use up/down keys)
     IM_ASSERT(!((flags & ImGuiInputTextFlags_CallbackCompletion) && (flags & ImGuiInputTextFlags_AllowTabInput))); // Can't use both together (they both use tab key)
     IM_ASSERT(!((flags & ImGuiInputTextFlags_ElideLeft) && (flags & ImGuiInputTextFlags_Multiline)));               // Multiline will not work with left-trimming
@@ -6338,33 +6341,17 @@ bool ImGui::InputTextEx2(const char* label, const char* hint, char* buf, int buf
         bool clamp_enabled = false;
         double data = 0;
         char buffer[512] = { 0 };
-        if (TempInputText(frame_bb, id, label, buffer, 512, 0))
+        if (state && TempInputText(frame_bb, id, label, buffer, 512, 0))
         {
             double tvalue;
             int rc = sscanf(state->TextA.Data, "%lf", &tvalue);
-            double max = 100;
             char formatBuf[32] = { 0 };
-            switch (precision) {
-            case 1:sprintf(formatBuf, "%% 6.1lf%%s"); max = 999.9; break;
-            case 2:sprintf(formatBuf, "%% 7.2lf%%s"); max = 999.99; break;
-            case 3:sprintf(formatBuf, "%% 8.3lf%%s"); max = 999.999; break;
-            case 4:sprintf(formatBuf, "%% 9.4lf%%s"); max = 999.9999; break;
-            }
-
+            int foreDigits = dotPosition - 1;
+            sprintf(formatBuf, "%% %d.%dlf%%s",foreDigits+1+precision, precision);
+            double max = pow(10, foreDigits) - 1 / pow(10, precision);
             if (tvalue > max) tvalue = max; else if (tvalue < -max) tvalue = -max;
             sprintf(buf, formatBuf, tvalue);
 
-            //if (data > 999.9999) data = 999.9999;
-            //if (data < -999.9999) data = -999.9999;
-
-            //strcpy(buf, state->TextA.Data);
-            //state->TextA[state->TextLen + 1] = 0;
-           // sprintf(buf, "%.4lf", dd);
-            //sprintf(&state->TextA[0], "%lf", dd);
-            //state->TextLen = strlen(buf) + 1;
-            //state->Stb->cursor = 0;
-            //state->Stb->select_start = 0;
-            //state->Stb->select_end = state->TextLen;
             return false;
         }
     }
@@ -6526,8 +6513,8 @@ bool ImGui::InputTextEx2(const char* label, const char* hint, char* buf, int buf
             {
                 g.TempInputId = g.ActiveId;
                 ImStb::stb_textedit_clamp(state, state->Stb);
-                double dd;
 
+                double dd;
                 char formatBuf[32];
                 double max = 100;
                 switch (precision) {
@@ -6554,7 +6541,7 @@ bool ImGui::InputTextEx2(const char* label, const char* hint, char* buf, int buf
         {
             if (hovered)
             {
-                if (!io.KeyShift && ! io.KeyAlt)
+                if (!io.KeyShift && !io.KeyAlt)
                     stb_textedit_click(state, state->Stb, mouse_x, mouse_y);
 
                 if (state->Stb->cursor == 4)
@@ -6677,36 +6664,41 @@ bool ImGui::InputTextEx2(const char* label, const char* hint, char* buf, int buf
         else if (IsKeyPressed(ImGuiKey_PageUp) && is_multiline) { state->OnKeyPressed(STB_TEXTEDIT_K_PGUP | k_mask); scroll_y -= row_count_per_page * g.FontSize; }
         else if (IsKeyPressed(ImGuiKey_PageDown) && is_multiline) { state->OnKeyPressed(STB_TEXTEDIT_K_PGDOWN | k_mask); scroll_y += row_count_per_page * g.FontSize; }
         else if (IsKeyPressed(ImGuiKey_Home)) { state->OnKeyPressed(io.KeyCtrl ? STB_TEXTEDIT_K_TEXTSTART | k_mask : STB_TEXTEDIT_K_LINESTART | k_mask); }
+        else if (IsKeyPressed(ImGuiKey_F2))
+        {
+            g.TempInputId = g.ActiveId;
+            ImStb::stb_textedit_clamp(state, state->Stb);
+
+            double num;
+            int rc = sscanf(buf, "%lf", &num);
+
+            char formatBuf[32];
+            double max = 100;
+            int foreDigits = dotPosition - 1;
+            sprintf(formatBuf, "%% %d.%dlf%%s", foreDigits + 1 + precision, precision);
+            if (num > max) num = max; if (num < -max) num = -max;
+
+            sprintf(buf, formatBuf, num);
+            sprintf(&state->TextA[0], formatBuf, num);
+            state->TextLen = (int)strlen(buf);
+            state->Stb->cursor = 0;
+            state->Stb->select_start = 0;
+            state->Stb->select_end = state->TextLen;
+
+        }
         else if (IsKeyPressed(ImGuiKey_End))
         {
             state->OnKeyPressed(io.KeyCtrl ? STB_TEXTEDIT_K_TEXTEND | k_mask : STB_TEXTEDIT_K_LINEEND | k_mask);
-            if (state->Stb->cursor > 8)
-                state->Stb->cursor = 8;
+            if (state->Stb->cursor > maxPosition)
+                state->Stb->cursor = maxPosition;
         }
         else if (IsKeyPressed(ImGuiKey_Delete) && !is_readonly && !is_cut)
         {
-            if (!state->HasSelection())
-            {
-                // OSX doesn't seem to have Super+Delete to delete until end-of-line, so we don't emulate that (as opposed to Super+Backspace)
-                if (is_wordmove_key_down)
-                    state->OnKeyPressed(STB_TEXTEDIT_K_WORDRIGHT | STB_TEXTEDIT_K_SHIFT);
-            }
             state->OnKeyPressed(STB_TEXTEDIT_K_DELETE | k_mask);
         }
         else if (IsKeyPressed(ImGuiKey_Backspace) && !is_readonly)
         {
-            if (!state->HasSelection())
-            {
-                if (is_wordmove_key_down)
-                    state->OnKeyPressed(STB_TEXTEDIT_K_WORDLEFT | STB_TEXTEDIT_K_SHIFT);
-                else if (is_osx && io.KeyCtrl && !io.KeyAlt && !io.KeySuper)
-                    state->OnKeyPressed(STB_TEXTEDIT_K_LINESTART | STB_TEXTEDIT_K_SHIFT);
-            }
             state->OnKeyPressed(STB_TEXTEDIT_K_BACKSPACE | k_mask);
-            if (state->Stb->cursor == 4)
-                state->Stb->cursor = 3;
-            if (state->Stb->cursor > 8)
-                state->Stb->cursor = 8;
         }
         else if (is_enter_pressed || is_gamepad_validate)
         {
@@ -6811,6 +6803,18 @@ bool ImGui::InputTextEx2(const char* label, const char* hint, char* buf, int buf
         // Update render selection flag after events have been handled, so selection highlight can be displayed during the same frame.
         render_selection |= state->HasSelection() && (RENDER_SELECTION_WHEN_INACTIVE || render_cursor);
     }
+
+    if (state)
+    if (state->TextLen >= 3)
+        for (int f = 1; f < state->TextLen - 1; f++)
+            if ((state->TextA[f - 1] >= '0' && state->TextA[f - 1] <= '9') &&
+                (state->TextA[f + 1] >= '0' && state->TextA[f + 1] <= '9') &&
+                state->TextA[f] == ' ')
+            {
+                state->TextA[f] = '0';
+                strcpy(buf, state->TextA.Data);
+            }
+
 
     // Process callbacks and apply result back to user's buffer.
     const char* apply_new_text = NULL;
@@ -7243,9 +7247,9 @@ void ImGui::DebugNodeInputTextState(ImGuiInputTextState* state)
                 undo_rec_type, n, undo_rec->where, undo_rec->insert_length, undo_rec->delete_length, undo_rec->char_storage, buf_preview_len, buf_preview_str);
             if (undo_rec_type == ' ')
                 EndDisabled();
-    }
+        }
         PopStyleVar();
-}
+    }
     EndChild();
 #else
     IM_UNUSED(state);
@@ -12115,9 +12119,9 @@ bool    ImGui::TabItemEx(ImGuiTabBar* tab_bar, const char* label, bool* p_open, 
                 g.ActiveIdClickOffset -= g.MovingWindow->Pos - bb.Min;
                 g.ActiveIdNoClearOnFocusLoss = true;
                 SetActiveIdUsingAllKeyboardKeys();
+            }
         }
     }
-}
 
 #if 0
     if (hovered && g.HoveredIdNotActiveTimer > TOOLTIP_DELAY && bb.GetWidth() < tab->ContentWidth)
@@ -12126,7 +12130,7 @@ bool    ImGui::TabItemEx(ImGuiTabBar* tab_bar, const char* label, bool* p_open, 
         bb.Max.x = bb.Min.x + IM_TRUNC(ImLerp(bb.GetWidth(), tab->ContentWidth, ImSaturate((g.HoveredIdNotActiveTimer - 0.40f) * 6.0f)));
         display_draw_list = GetForegroundDrawList(window);
         TabItemBackground(display_draw_list, bb, flags, GetColorU32(ImGuiCol_TitleBgActive));
-    }
+        }
 #endif
 
     // Render tab shape
@@ -12199,7 +12203,7 @@ bool    ImGui::TabItemEx(ImGuiTabBar* tab_bar, const char* label, bool* p_open, 
     if (is_tab_button)
         return pressed;
     return tab_contents_visible;
-}
+    }
 
 // [Public] This is call is 100% optional but it allows to remove some one-frame glitches when a tab has been unexpectedly removed.
 // To use it to need to call the function SetTabItemClosed() between BeginTabBar() and EndTabBar().
@@ -12356,7 +12360,7 @@ void ImGui::TabItemLabelAndCloseButton(ImDrawList* draw_list, const ImRect& bb, 
 
     if (out_just_closed)
         *out_just_closed = close_button_pressed;
-    }
+}
 
 
 #endif // #ifndef IMGUI_DISABLE
