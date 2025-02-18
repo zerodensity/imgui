@@ -4427,7 +4427,7 @@ void ImGui::InputTextDeactivateHook(ImGuiID id)
     }
 }
 
-bool ImGui::InputTextEx3(const char* label, const char* hint, char* buf, int buf_size, int precision, const ImVec2& size_arg, ImGuiInputTextFlags flags, ImGuiInputTextCallback callback, void* callback_user_data)
+bool ImGui::InputTextEx3(const char* label, const char* hint, char* buf, int buf_size, int /*precision*/, const ImVec2& size_arg, ImGuiInputTextFlags flags, ImGuiInputTextCallback callback, void* callback_user_data)
 {
     ImGuiWindow* window = GetCurrentWindow();
     if (window->SkipItems)
@@ -6329,7 +6329,7 @@ bool ImGui::InputTextEx2(const char* label, const char* hint, char* buf, int buf
 
     float scroll_y = is_multiline ? draw_window->Scroll.y : FLT_MAX;
 
-    const bool init_reload_from_user_buf = (state != NULL && state->WantReloadUserBuf);
+    //const bool init_reload_from_user_buf = (state != NULL && state->WantReloadUserBuf);
     const bool init_changed_specs = (state != NULL && state->Stb->single_line != !is_multiline); // state != NULL means its our state.
     const bool init_make_active = (user_clicked || user_scroll_finish || input_requested_by_nav);
     const bool init_state = (init_make_active || user_scroll_active);
@@ -6338,13 +6338,13 @@ bool ImGui::InputTextEx2(const char* label, const char* hint, char* buf, int buf
     if (temp_input_is_active)
     {
         // Only clamp CTRL+Click input when ImGuiSliderFlags_ClampOnInput is set (generally via ImGuiSliderFlags_AlwaysClamp)
-        bool clamp_enabled = false;
-        double data = 0;
+        //bool clamp_enabled = false;
+        //double data = 0;
         char buffer[512] = { 0 };
         if (state && TempInputText(frame_bb, id, label, buffer, 512, 0))
         {
             double tvalue;
-            int rc = sscanf(state->TextA.Data, "%lf", &tvalue);
+            sscanf(state->TextA.Data, "%lf", &tvalue);
             char formatBuf[32] = { 0 };
             int foreDigits = dotPosition - 1;
             sprintf(formatBuf, "%% %d.%dlf", foreDigits + 1 + precision, precision);
@@ -6515,7 +6515,7 @@ bool ImGui::InputTextEx2(const char* label, const char* hint, char* buf, int buf
                 ImStb::stb_textedit_clamp(state, state->Stb);
 
                 double tvalue;
-                int rc = sscanf(state->TextA.Data, "%lf", &tvalue);
+                sscanf(state->TextA.Data, "%lf", &tvalue);
                 char formatBuf[32] = { 0 };
                 int foreDigits = dotPosition - 1;
                 sprintf(formatBuf, "%% %d.%dlf", foreDigits + 1 + precision, precision);
@@ -6687,7 +6687,7 @@ bool ImGui::InputTextEx2(const char* label, const char* hint, char* buf, int buf
             ImStb::stb_textedit_clamp(state, state->Stb);
 
             double tvalue;
-            int rc = sscanf(state->TextA.Data, "%lf", &tvalue);
+            sscanf(state->TextA.Data, "%lf", &tvalue);
             char formatBuf[32] = { 0 };
             int foreDigits = dotPosition - 1;
             sprintf(formatBuf, "%% %d.%dlf", foreDigits + 1 + precision, precision);
@@ -7051,7 +7051,7 @@ bool ImGui::InputTextEx2(const char* label, const char* hint, char* buf, int buf
         // We are attempting to do most of that in **one main pass** to minimize the computation cost (non-negligible for large amount of text) + 2nd pass for selection rendering (we could merge them by an extra refactoring effort)
         // FIXME: This should occur on buf_display but we'd need to maintain cursor/select_start/select_end for UTF-8.
         const char* text_begin = buf_display;
-        const char* text_end = text_begin + state->TextLen;
+        //const char* text_end = text_begin + state->TextLen;
         ImVec2 cursor_offset, select_start_offset;
 
         {
@@ -7163,7 +7163,7 @@ bool ImGui::InputTextEx2(const char* label, const char* hint, char* buf, int buf
         if (render_cursor)
         {
             state->CursorAnim += io.DeltaTime;
-            bool cursor_is_visible = (!g.IO.ConfigInputTextCursorBlink) || (state->CursorAnim <= 0.0f) || ImFmod(state->CursorAnim, 1.20f) <= 0.80f;
+            //bool cursor_is_visible = (!g.IO.ConfigInputTextCursorBlink) || (state->CursorAnim <= 0.0f) || ImFmod(state->CursorAnim, 1.20f) <= 0.80f;
             ImVec2 cursor_screen_pos = ImTrunc(draw_pos + cursor_offset - draw_scroll);
             ImRect cursor_screen_rect(cursor_screen_pos.x, cursor_screen_pos.y - g.FontSize + 0.5f, cursor_screen_pos.x + 1.0f, cursor_screen_pos.y - 1.5f);
             if (cursor_screen_rect.Overlaps(clip_rect))
