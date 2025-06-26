@@ -3795,6 +3795,11 @@ bool ImGui::InputFloat(const char* label, float* v, float step, float step_fast,
     return InputScalar(label, ImGuiDataType_Float, (void*)v, (void*)(step > 0.0f ? &step : NULL), (void*)(step_fast > 0.0f ? &step_fast : NULL), format, flags);
 }
 
+bool ImGui::InputDoubleEx(const char* label, double* v, int precision, const char* format, ImGuiInputTextFlags flags)
+{
+    return InputScalarEx(label, ImGuiDataType_Double, (void*)v, precision, format, flags);
+}
+
 bool ImGui::InputFloat2(const char* label, float v[2], const char* format, ImGuiInputTextFlags flags)
 {
     return InputScalarN(label, ImGuiDataType_Float, v, 2, NULL, NULL, format, flags);
@@ -3837,6 +3842,7 @@ bool ImGui::InputDouble(const char* label, double* v, double step, double step_f
     return InputScalar(label, ImGuiDataType_Double, (void*)v, (void*)(step > 0.0 ? &step : NULL), (void*)(step_fast > 0.0 ? &step_fast : NULL), format, flags);
 }
 
+
 //-------------------------------------------------------------------------
 // [SECTION] Widgets: InputText, InputTextMultiline, InputTextWithHint
 //-------------------------------------------------------------------------
@@ -3860,6 +3866,12 @@ bool ImGui::InputText(const char* label, char* buf, size_t buf_size, ImGuiInputT
 {
     IM_ASSERT(!(flags & ImGuiInputTextFlags_Multiline)); // call InputTextMultiline()
     return InputTextEx(label, NULL, buf, (int)buf_size, ImVec2(0, 0), flags, callback, user_data);
+}
+
+bool ImGui::InputText3(const char* label, char* buf, size_t buf_size, int precision, ImGuiInputTextFlags flags, ImGuiInputTextCallback callback, void* user_data)
+{
+    IM_ASSERT(!(flags & ImGuiInputTextFlags_Multiline)); // call InputTextMultiline()
+    return InputTextEx3(label, NULL, buf, (int)buf_size, precision, ImVec2(0, 0), flags, callback, user_data);
 }
 
 bool ImGui::InputText2(const char* label, char* buf, size_t buf_size, int precision, ImGuiInputTextFlags flags, ImGuiInputTextCallback callback, void* user_data)
@@ -4427,7 +4439,17 @@ void ImGui::InputTextDeactivateHook(ImGuiID id)
     }
 }
 
-bool ImGui::InputTextEx3(const char* label, const char* hint, char* buf, int buf_size, int /*precision*/, const ImVec2& size_arg, ImGuiInputTextFlags flags, ImGuiInputTextCallback callback, void* callback_user_data)
+
+
+// Edit a string of text
+// - buf_size account for the zero-terminator, so a buf_size of 6 can hold "Hello" but not "Hello!".
+//   This is so we can easily call InputText() on static arrays using ARRAYSIZE() and to match
+//   Note that in std::string world, capacity() would omit 1 byte used by the zero-terminator.
+// - When active, hold on a privately held copy of the text (and apply back to 'buf'). So changing 'buf' while the InputText is active has no effect.
+// - If you want to use ImGui::InputText() with std::string, see misc/cpp/imgui_stdlib.h
+// (FIXME: Rather confusing and messy function, among the worse part of our codebase, expecting to rewrite a V2 at some point.. Partly because we are
+//  doing UTF8 > U16 > UTF8 conversions on the go to easily interface with stb_textedit. Ideally should stay in UTF-8 all the time. See https://github.com/nothings/stb/issues/188)
+bool ImGui::InputTextEx3(const char* label, const char* hint, char* buf, int buf_size, int, const ImVec2& size_arg, ImGuiInputTextFlags flags, ImGuiInputTextCallback callback, void* callback_user_data)
 {
     ImGuiWindow* window = GetCurrentWindow();
     if (window->SkipItems)
@@ -4458,12 +4480,55 @@ bool ImGui::InputTextEx3(const char* label, const char* hint, char* buf, int buf
     ImGuiWindow* draw_window = window;
     ImVec2 inner_size = frame_size;
     ImGuiLastItemData item_data_backup;
-
-    // Support for internal ImGuiInputTextFlags_MergedItem flag, which could be redesigned as an ItemFlags if needed (with test performed in ItemAdd)
-    ItemSize(total_bb, style.FramePadding.y);
-    if (!(flags & ImGuiInputTextFlags_MergedItem))
+    if (is_multiline)
+    {
+        ImVec2 backup_pos = window->DC.CursorPos;
+        ItemSize(total_bb, style.FramePadding.y);
         if (!ItemAdd(total_bb, id, &frame_bb, ImGuiItemFlags_Inputable))
+        {
+            EndGroup();
             return false;
+        }
+        item_data_backup = g.LastItemData;
+        window->DC.CursorPos = backup_pos;
+
+        // Prevent NavActivation from Tabbing when our widget accepts Tab inputs: this allows cycling through widgets without stopping.
+        if (g.NavActivateId == id && (g.NavActivateFlags & ImGuiActivateFlags_FromTabbing) && (flags & ImGuiInputTextFlags_AllowTabInput))
+            g.NavActivateId = 0;
+
+        // Prevent NavActivate reactivating in BeginChild() when we are already active.
+        const ImGuiID backup_activate_id = g.NavActivateId;
+        if (g.ActiveId == id) // Prevent reactivation
+            g.NavActivateId = 0;
+
+        // We reproduce the contents of BeginChildFrame() in order to provide 'label' so our window internal data are easier to read/debug.
+        PushStyleColor(ImGuiCol_ChildBg, style.Colors[ImGuiCol_FrameBg]);
+        PushStyleVar(ImGuiStyleVar_ChildRounding, style.FrameRounding);
+        PushStyleVar(ImGuiStyleVar_ChildBorderSize, style.FrameBorderSize);
+        PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0)); // Ensure no clip rect so mouse hover can reach FramePadding edges
+        bool child_visible = BeginChildEx(label, id, frame_bb.GetSize(), ImGuiChildFlags_Borders, ImGuiWindowFlags_NoMove);
+        g.NavActivateId = backup_activate_id;
+        PopStyleVar(3);
+        PopStyleColor();
+        if (!child_visible)
+        {
+            EndChild();
+            EndGroup();
+            return false;
+        }
+        draw_window = g.CurrentWindow; // Child window
+        draw_window->DC.NavLayersActiveMaskNext |= (1 << draw_window->DC.NavLayerCurrent); // This is to ensure that EndChild() will display a navigation highlight so we can "enter" into it.
+        draw_window->DC.CursorPos += style.FramePadding;
+        inner_size.x -= draw_window->ScrollbarSizes.x;
+    }
+    else
+    {
+        // Support for internal ImGuiInputTextFlags_MergedItem flag, which could be redesigned as an ItemFlags if needed (with test performed in ItemAdd)
+        ItemSize(total_bb, style.FramePadding.y);
+        if (!(flags & ImGuiInputTextFlags_MergedItem))
+            if (!ItemAdd(total_bb, id, &frame_bb, ImGuiItemFlags_Inputable))
+                return false;
+    }
 
     // Ensure mouse cursor is set even after switching to keyboard/gamepad mode. May generalize further? (#6417)
     bool hovered = ItemHoverable(frame_bb, id, g.LastItemData.ItemFlags | ImGuiItemFlags_NoNavDisableMouseHover);
@@ -4600,6 +4665,10 @@ bool ImGui::InputTextEx3(const char* label, const char* hint, char* buf, int buf
         // FIXME: May be a problem to always steal Alt on OSX, would ideally still allow an uninterrupted Alt down-up to toggle menu
         if (is_osx)
             SetKeyOwner(ImGuiMod_Alt, id);
+
+        // Expose scroll in a manner that is agnostic to us using a child window
+        if (is_multiline && state != NULL)
+            state->Scroll.y = draw_window->Scroll.y;
 
         // Read-only mode always ever read from source buffer. Refresh TextLen when active.
         if (is_readonly && state != NULL)
@@ -5314,16 +5383,6 @@ bool ImGui::InputTextEx3(const char* label, const char* hint, char* buf, int buf
     else
         return value_changed;
 }
-
-
-// Edit a string of text
-// - buf_size account for the zero-terminator, so a buf_size of 6 can hold "Hello" but not "Hello!".
-//   This is so we can easily call InputText() on static arrays using ARRAYSIZE() and to match
-//   Note that in std::string world, capacity() would omit 1 byte used by the zero-terminator.
-// - When active, hold on a privately held copy of the text (and apply back to 'buf'). So changing 'buf' while the InputText is active has no effect.
-// - If you want to use ImGui::InputText() with std::string, see misc/cpp/imgui_stdlib.h
-// (FIXME: Rather confusing and messy function, among the worse part of our codebase, expecting to rewrite a V2 at some point.. Partly because we are
-//  doing UTF8 > U16 > UTF8 conversions on the go to easily interface with stb_textedit. Ideally should stay in UTF-8 all the time. See https://github.com/nothings/stb/issues/188)
 bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_size, const ImVec2& size_arg, ImGuiInputTextFlags flags, ImGuiInputTextCallback callback, void* callback_user_data)
 {
     ImGuiWindow* window = GetCurrentWindow();
@@ -5355,55 +5414,13 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
     ImGuiWindow* draw_window = window;
     ImVec2 inner_size = frame_size;
     ImGuiLastItemData item_data_backup;
-    if (is_multiline)
-    {
-        ImVec2 backup_pos = window->DC.CursorPos;
-        ItemSize(total_bb, style.FramePadding.y);
+
+    // Support for internal ImGuiInputTextFlags_MergedItem flag, which could be redesigned as an ItemFlags if needed (with test performed in ItemAdd)
+    ItemSize(total_bb, style.FramePadding.y);
+    if (!(flags & ImGuiInputTextFlags_MergedItem))
         if (!ItemAdd(total_bb, id, &frame_bb, ImGuiItemFlags_Inputable))
-        {
-            EndGroup();
             return false;
-        }
-        item_data_backup = g.LastItemData;
-        window->DC.CursorPos = backup_pos;
 
-        // Prevent NavActivation from Tabbing when our widget accepts Tab inputs: this allows cycling through widgets without stopping.
-        if (g.NavActivateId == id && (g.NavActivateFlags & ImGuiActivateFlags_FromTabbing) && (flags & ImGuiInputTextFlags_AllowTabInput))
-            g.NavActivateId = 0;
-
-        // Prevent NavActivate reactivating in BeginChild() when we are already active.
-        const ImGuiID backup_activate_id = g.NavActivateId;
-        if (g.ActiveId == id) // Prevent reactivation
-            g.NavActivateId = 0;
-
-        // We reproduce the contents of BeginChildFrame() in order to provide 'label' so our window internal data are easier to read/debug.
-        PushStyleColor(ImGuiCol_ChildBg, style.Colors[ImGuiCol_FrameBg]);
-        PushStyleVar(ImGuiStyleVar_ChildRounding, style.FrameRounding);
-        PushStyleVar(ImGuiStyleVar_ChildBorderSize, style.FrameBorderSize);
-        PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0)); // Ensure no clip rect so mouse hover can reach FramePadding edges
-        bool child_visible = BeginChildEx(label, id, frame_bb.GetSize(), ImGuiChildFlags_Borders, ImGuiWindowFlags_NoMove);
-        g.NavActivateId = backup_activate_id;
-        PopStyleVar(3);
-        PopStyleColor();
-        if (!child_visible)
-        {
-            EndChild();
-            EndGroup();
-            return false;
-        }
-        draw_window = g.CurrentWindow; // Child window
-        draw_window->DC.NavLayersActiveMaskNext |= (1 << draw_window->DC.NavLayerCurrent); // This is to ensure that EndChild() will display a navigation highlight so we can "enter" into it.
-        draw_window->DC.CursorPos += style.FramePadding;
-        inner_size.x -= draw_window->ScrollbarSizes.x;
-    }
-    else
-    {
-        // Support for internal ImGuiInputTextFlags_MergedItem flag, which could be redesigned as an ItemFlags if needed (with test performed in ItemAdd)
-        ItemSize(total_bb, style.FramePadding.y);
-        if (!(flags & ImGuiInputTextFlags_MergedItem))
-            if (!ItemAdd(total_bb, id, &frame_bb, ImGuiItemFlags_Inputable))
-                return false;
-    }
 
     // Ensure mouse cursor is set even after switching to keyboard/gamepad mode. May generalize further? (#6417)
     bool hovered = ItemHoverable(frame_bb, id, g.LastItemData.ItemFlags | ImGuiItemFlags_NoNavDisableMouseHover);
@@ -5483,9 +5500,6 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
         }
 
         // Find initial scroll position for right alignment
-        state->Scroll = ImVec2(0.0f, 0.0f);
-        if (flags & ImGuiInputTextFlags_ElideLeft)
-            state->Scroll.x += ImMax(0.0f, CalcTextSize(buf).x - frame_size.x + style.FramePadding.x * 2.0f);
 
         // Recycle existing cursor/selection/undo stack but clamp position
         // Note a single mouse click will override the cursor/position immediately by calling stb_textedit_click handler.
@@ -6500,12 +6514,7 @@ bool ImGui::InputTextEx2(const char* label, const char* hint, char* buf, int buf
         const float mouse_x = (io.MousePos.x - frame_bb.Min.x - style.FramePadding.x) + state->Scroll.x;
         const float mouse_y = (is_multiline ? (io.MousePos.y - draw_window->DC.CursorPos.y) : (g.FontSize * 0.5f));
 
-        if (select_all)
-        {
-            state->SelectAll();
-            state->SelectedAllMouseLock = true;
-        }
-        else if (hovered && io.MouseClickedCount[0] >= 2 && !io.KeyShift)
+        if (hovered && io.MouseClickedCount[0] >= 2 && !io.KeyShift)
         {
             stb_textedit_click(state, state->Stb, mouse_x, mouse_y);
             const int multiclick_count = (io.MouseClickedCount[0] - 2);
@@ -6713,7 +6722,7 @@ bool ImGui::InputTextEx2(const char* label, const char* hint, char* buf, int buf
         }
         else if (IsKeyPressed(ImGuiKey_Backspace) && !is_readonly)
         {
-//            state->OnKeyPressed(STB_TEXTEDIT_K_BACKSPACE | k_mask);
+            //            state->OnKeyPressed(STB_TEXTEDIT_K_BACKSPACE | k_mask);
             state->Edited = true;
         }
         else if (is_enter_pressed || is_gamepad_validate)
@@ -6821,15 +6830,15 @@ bool ImGui::InputTextEx2(const char* label, const char* hint, char* buf, int buf
     }
 
     if (state)
-    if (state->TextLen >= 3)
-        for (int f = 1; f < state->TextLen - 1; f++)
-            if ((state->TextA[f - 1] >= '0' && state->TextA[f - 1] <= '9') &&
-                (state->TextA[f + 1] >= '0' && state->TextA[f + 1] <= '9') &&
-                state->TextA[f] == ' ')
-            {
-                state->TextA[f] = '0';
-                strcpy(buf, state->TextA.Data);
-            }
+        if (state->TextLen >= 3)
+            for (int f = 1; f < state->TextLen - 1; f++)
+                if ((state->TextA[f - 1] >= '0' && state->TextA[f - 1] <= '9') &&
+                    (state->TextA[f + 1] >= '0' && state->TextA[f + 1] <= '9') &&
+                    state->TextA[f] == ' ')
+                {
+                    state->TextA[f] = '0';
+                    strcpy(buf, state->TextA.Data);
+                }
 
 
     // Process callbacks and apply result back to user's buffer.
@@ -7270,7 +7279,7 @@ void ImGui::DebugNodeInputTextState(ImGuiInputTextState* state)
 #else
     IM_UNUSED(state);
 #endif
-    }
+}
 
 //-------------------------------------------------------------------------
 // [SECTION] Widgets: ColorEdit, ColorPicker, ColorButton, etc.
@@ -12146,7 +12155,7 @@ bool    ImGui::TabItemEx(ImGuiTabBar* tab_bar, const char* label, bool* p_open, 
         bb.Max.x = bb.Min.x + IM_TRUNC(ImLerp(bb.GetWidth(), tab->ContentWidth, ImSaturate((g.HoveredIdNotActiveTimer - 0.40f) * 6.0f)));
         display_draw_list = GetForegroundDrawList(window);
         TabItemBackground(display_draw_list, bb, flags, GetColorU32(ImGuiCol_TitleBgActive));
-        }
+    }
 #endif
 
     // Render tab shape
@@ -12219,7 +12228,7 @@ bool    ImGui::TabItemEx(ImGuiTabBar* tab_bar, const char* label, bool* p_open, 
     if (is_tab_button)
         return pressed;
     return tab_contents_visible;
-    }
+}
 
 // [Public] This is call is 100% optional but it allows to remove some one-frame glitches when a tab has been unexpectedly removed.
 // To use it to need to call the function SetTabItemClosed() between BeginTabBar() and EndTabBar().
