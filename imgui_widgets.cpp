@@ -3795,11 +3795,6 @@ bool ImGui::InputFloat(const char* label, float* v, float step, float step_fast,
     return InputScalar(label, ImGuiDataType_Float, (void*)v, (void*)(step > 0.0f ? &step : NULL), (void*)(step_fast > 0.0f ? &step_fast : NULL), format, flags);
 }
 
-bool ImGui::InputDoubleEx(const char* label, double* v, int precision, const char* format, ImGuiInputTextFlags flags)
-{
-    return InputScalarEx(label, ImGuiDataType_Double, (void*)v, precision, format, flags);
-}
-
 bool ImGui::InputFloat2(const char* label, float v[2], const char* format, ImGuiInputTextFlags flags)
 {
     return InputScalarN(label, ImGuiDataType_Float, v, 2, NULL, NULL, format, flags);
