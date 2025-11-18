@@ -1,0 +1,9 @@
+{
+    "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg/master/scripts/vcpkg.schema.json",
+    "name": "traxishub-imgui",
+    "version": "1.0.0",
+    "dependencies": [
+        "freetype-gl"
+    ],
+    "builtin-baseline": "fc5118086f5db341ee4ab3a7d4d64c0f39896270"
+}
