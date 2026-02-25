@@ -17,6 +17,7 @@
     <ClCompile Include="imgui_draw.cpp" />
     <ClCompile Include="imgui_tables.cpp" />
     <ClCompile Include="imgui_widgets.cpp" />
+    <ClCompile Include="misc\cpp\imgui_stdlib.cpp" />
     <ClCompile Include="misc\freetype\imgui_freetype.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -29,6 +30,7 @@
     <ClInclude Include="imstb_rectpack.h" />
     <ClInclude Include="imstb_textedit.h" />
     <ClInclude Include="imstb_truetype.h" />
+    <ClInclude Include="misc\cpp\imgui_stdlib.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\glfw\glfw.vcxproj">
